@@ -1,0 +1,50 @@
+# 忽略 Visual Studio 临时文件、构建输出和用户设置
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# 忽略编译生成目录
+bin/
+obj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]og/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+
+# 忽略测试结果
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# 忽略发布包
+*.Publish.xml
+*.pubxml
+*.publishproj
+
+# 忽略 Resharper / Rider / VSCode 等缓存
+_ReSharper*/
+*.DotSettings.user
+.idea/
+.vscode/
+
+# 忽略 NuGet 包
+*.nupkg
+*.snupkg
+packages/
+*.nuspec
+
+# 忽略其它不必要文件
+*.bak
+*.tmp
+*.log
+*.cache
+*.pdb
+*.dbmdl
+*.jfm
