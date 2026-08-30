@@ -461,13 +461,17 @@ namespace MultiToolWin.Pages
                     {
                         if (rdoFolderMode.Checked)
                         {
-                            var folders = Directory.GetDirectories(root);
+                            var folders = Directory.GetDirectories(root)
+                                .OrderBy(path => Path.GetFileName(path), new NaturalStringComparer())
+                                .ToArray();
                             ExportListToExcel(folders.Select(f => Path.GetFileName(f)).ToList(), sfd.FileName, "文件夹清单");
                             LogEx($"导出文件夹清单成功，共 {folders.Length} 个文件夹。");
                         }
                         else if (rdoFileMode.Checked)
                         {
-                            var files = Directory.GetFiles(root);
+                            var files = Directory.GetFiles(root)
+                                .OrderBy(path => Path.GetFileName(path), new NaturalStringComparer())
+                                .ToArray();
                             ExportListToExcel(files.Select(f => Path.GetFileName(f)).ToList(), sfd.FileName, "文件清单");
                             LogEx($"导出文件清单成功，共 {files.Length} 个文件。");
                         }
