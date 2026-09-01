@@ -26,6 +26,20 @@ namespace MultiToolWin.Pages
         private string _folderColName = null;
         private string _expectedColName = null;
 
+        private enum CompareStructure
+        {
+            Unknown,
+            OneLevel,
+            TwoLevel
+        }
+
+        private sealed class CompareTarget
+        {
+            public string FullPath { get; set; }
+            public string RelativePath { get; set; }
+            public string Name { get; set; }
+        }
+
         public PageCompare(Action<string> logger)
         {
             Log = logger;
@@ -249,31 +263,74 @@ namespace MultiToolWin.Pages
             var useGIF = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("GIF"));
             var usePDF = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("PDF"));
 
+            var selectedExtensions = GetSelectedExtensions(useJPG, usePNG, useTIF, useGIF, usePDF);
+            if (selectedExtensions.Count == 0)
+            {
+                Log("未勾选参与统计的格式，无法识别目录结构。");
+                return;
+            }
+
+            int volumeCount;
+            List<CompareTarget> targets;
+            var structure = DetectCompareStructure(root, selectedExtensions, out targets, out volumeCount);
+            if (structure == CompareStructure.Unknown)
+            {
+                Log("目录结构无法识别，已停止本次校对。");
+                return;
+            }
+
+            if (structure == CompareStructure.OneLevel)
+            {
+                Log("已识别目录结构：根目录 → 件目录 → 图片");
+                Log($"发现校对目录：{targets.Count} 个");
+            }
+            else
+            {
+                Log("已识别目录结构：根目录 → 卷目录 → 件目录 → 图片");
+                Log($"发现卷目录：{volumeCount} 个");
+                Log($"发现件目录：{targets.Count} 个");
+            }
+
             grid.Rows.Clear();
             int match = 0;
 
             foreach (var (folder, expected) in rows)
             {
-                var dir = Path.Combine(root, folder);
-                int actual = 0;
-                if (Directory.Exists(dir))
+                string dir;
+                bool targetResolved = true;
+                string relativePath = folder;
+
+                if (structure == CompareStructure.OneLevel)
                 {
-                    if (useJPG) actual += CountFiles(dir, new[] { ".jpg", ".jpeg" });
-                    if (usePNG) actual += CountFiles(dir, new[] { ".png" });
-                    if (useTIF) actual += CountFiles(dir, new[] { ".tif", ".tiff" });
-                    if (useGIF) actual += CountFiles(dir, new[] { ".gif" });
-                    if (usePDF) actual += CountPdfPages(dir); // 注意：PDF 统计页数
+                    // 保持旧逻辑：Excel 文件夹名直接对应根目录下的第一层目录。
+                    dir = Path.Combine(root, folder);
                 }
                 else
+                {
+                    var target = ResolveTwoLevelTarget(root, folder, targets);
+                    targetResolved = target != null;
+                    dir = targetResolved ? target.FullPath : null;
+                    if (targetResolved) relativePath = target.RelativePath;
+                }
+
+                int actual = 0;
+                if (targetResolved && Directory.Exists(dir))
+                {
+                    actual = CountActual(dir, useJPG, usePNG, useTIF, useGIF, usePDF);
+                }
+                else if (structure == CompareStructure.OneLevel)
                 {
                     Log($"目录不存在：{dir}");
                 }
 
                 int diff = actual - expected;
-                bool ok = diff == 0;
+                bool ok = targetResolved && diff == 0;
                 if (ok) match++;
 
                 grid.Rows.Add(folder, expected, actual, diff, ok ? "✔" : "✖");
+
+                if (structure == CompareStructure.TwoLevel && targetResolved && !ok)
+                    Log($"数量不一致：{relativePath}，应有：{expected}，实际：{actual}");
             }
 
             Log($"对比完成：共 {rows.Count} 行，其中匹配 {match} 行。");
@@ -454,6 +511,176 @@ namespace MultiToolWin.Pages
             if (v is int ii) return ii;
             if (int.TryParse(v.ToString(), out int t)) return t;
             return 0;
+        }
+
+        private static List<string> GetSelectedExtensions(bool useJPG, bool usePNG, bool useTIF, bool useGIF, bool usePDF)
+        {
+            var extensions = new List<string>();
+            if (useJPG) extensions.AddRange(new[] { ".jpg", ".jpeg" });
+            if (usePNG) extensions.Add(".png");
+            if (useTIF) extensions.AddRange(new[] { ".tif", ".tiff" });
+            if (useGIF) extensions.Add(".gif");
+            if (usePDF) extensions.Add(".pdf");
+            return extensions;
+        }
+
+        private CompareStructure DetectCompareStructure(string root, IEnumerable<string> selectedExtensions, out List<CompareTarget> targets, out int volumeCount)
+        {
+            targets = new List<CompareTarget>();
+            volumeCount = 0;
+
+            string[] levelOneDirectories;
+            try
+            {
+                levelOneDirectories = Directory.GetDirectories(root);
+            }
+            catch (Exception ex)
+            {
+                Log($"读取根目录失败：{ex.Message}");
+                return CompareStructure.Unknown;
+            }
+
+            if (levelOneDirectories.Length == 0)
+            {
+                Log("目录结构无法识别：根目录下没有子文件夹。");
+                return CompareStructure.Unknown;
+            }
+
+            var extensionSet = new HashSet<string>(selectedExtensions, StringComparer.OrdinalIgnoreCase);
+            var firstLevelWithFiles = new List<string>();
+            var allSecondLevelDirectories = new List<string>();
+            var secondLevelWithFiles = new List<string>();
+
+            try
+            {
+                foreach (var firstLevelDirectory in levelOneDirectories)
+                {
+                    if (ContainsSelectedFiles(firstLevelDirectory, extensionSet))
+                        firstLevelWithFiles.Add(firstLevelDirectory);
+
+                    var secondLevelDirectories = Directory.GetDirectories(firstLevelDirectory);
+                    foreach (var secondLevelDirectory in secondLevelDirectories)
+                    {
+                        allSecondLevelDirectories.Add(secondLevelDirectory);
+                        if (ContainsSelectedFiles(secondLevelDirectory, extensionSet))
+                            secondLevelWithFiles.Add(secondLevelDirectory);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"读取子目录失败：{ex.Message}");
+                return CompareStructure.Unknown;
+            }
+
+            if (firstLevelWithFiles.Count > 0 && secondLevelWithFiles.Count == 0)
+            {
+                targets = levelOneDirectories.Select(directory => CreateCompareTarget(root, directory)).ToList();
+                return CompareStructure.OneLevel;
+            }
+
+            if (firstLevelWithFiles.Count == 0 && secondLevelWithFiles.Count > 0)
+            {
+                volumeCount = levelOneDirectories.Length;
+                targets = allSecondLevelDirectories.Select(directory => CreateCompareTarget(root, directory)).ToList();
+                return CompareStructure.TwoLevel;
+            }
+
+            if (firstLevelWithFiles.Count > 0 && secondLevelWithFiles.Count > 0)
+                Log("目录结构无法识别：第一层和第二层目录中都发现了参与统计的文件。");
+            else
+                Log("目录结构无法识别：前两层目录中均未发现参与统计的文件。");
+
+            return CompareStructure.Unknown;
+        }
+
+        private static bool ContainsSelectedFiles(string directory, ISet<string> selectedExtensions)
+        {
+            return Directory.GetFiles(directory)
+                .Any(file => selectedExtensions.Contains(Path.GetExtension(file)));
+        }
+
+        private static CompareTarget CreateCompareTarget(string root, string directory)
+        {
+            var rootPrefix = GetRootPathPrefix(root);
+            var fullPath = Path.GetFullPath(directory);
+            var relativePath = fullPath.Substring(rootPrefix.Length);
+
+            return new CompareTarget
+            {
+                FullPath = fullPath,
+                RelativePath = relativePath,
+                Name = Path.GetFileName(fullPath)
+            };
+        }
+
+        private CompareTarget ResolveTwoLevelTarget(string root, string excelValue, List<CompareTarget> targets)
+        {
+            if (excelValue.IndexOf('\\') >= 0 || excelValue.IndexOf('/') >= 0)
+            {
+                string relativePath;
+                if (!TryNormalizeRelativePath(root, excelValue, out relativePath))
+                {
+                    Log($"无效相对路径：{excelValue}");
+                    return null;
+                }
+
+                var exactTarget = targets.FirstOrDefault(target =>
+                    string.Equals(target.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+                if (exactTarget == null)
+                    Log($"未找到件目录：{relativePath}");
+                return exactTarget;
+            }
+
+            var candidates = targets
+                .Where(target => string.Equals(target.Name, excelValue, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (candidates.Count == 1) return candidates[0];
+
+            if (candidates.Count == 0)
+                Log($"未找到件目录：{excelValue}");
+            else
+                Log($"名称不唯一，无法定位：{excelValue}。候选路径：{string.Join("、", candidates.Select(target => target.RelativePath))}");
+
+            return null;
+        }
+
+        private static bool TryNormalizeRelativePath(string root, string value, out string relativePath)
+        {
+            relativePath = null;
+            var input = (value ?? string.Empty).Trim();
+            if (input.Length == 0 || Path.IsPathRooted(input)) return false;
+
+            var parts = input.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0 || parts.Any(part => part == "." || part == "..")) return false;
+
+            var rootPrefix = GetRootPathPrefix(root);
+            var combinedPath = Path.Combine(rootPrefix, string.Join(Path.DirectorySeparatorChar.ToString(), parts));
+            var fullPath = Path.GetFullPath(combinedPath);
+            if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+
+            relativePath = fullPath.Substring(rootPrefix.Length);
+            return true;
+        }
+
+        private static string GetRootPathPrefix(string root)
+        {
+            var rootPath = Path.GetFullPath(root);
+            return rootPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                || rootPath.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? rootPath
+                : rootPath + Path.DirectorySeparatorChar;
+        }
+
+        private static int CountActual(string dir, bool useJPG, bool usePNG, bool useTIF, bool useGIF, bool usePDF)
+        {
+            int actual = 0;
+            if (useJPG) actual += CountFiles(dir, new[] { ".jpg", ".jpeg" });
+            if (usePNG) actual += CountFiles(dir, new[] { ".png" });
+            if (useTIF) actual += CountFiles(dir, new[] { ".tif", ".tiff" });
+            if (useGIF) actual += CountFiles(dir, new[] { ".gif" });
+            if (usePDF) actual += CountPdfPages(dir); // 注意：PDF 统计页数
+            return actual;
         }
 
         private static int CountFiles(string dir, IEnumerable<string> exts)
