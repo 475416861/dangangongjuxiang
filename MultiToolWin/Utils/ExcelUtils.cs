@@ -28,9 +28,9 @@ namespace MultiToolWin.Utils
         {
             var headers = new List<string>();
             using (var fs = File.OpenRead(path))
+            using (IWorkbook wb = Path.GetExtension(path).Equals(".xls", StringComparison.OrdinalIgnoreCase)
+                ? (IWorkbook)new HSSFWorkbook(fs) : new XSSFWorkbook(fs))
             {
-                IWorkbook wb = Path.GetExtension(path).Equals(".xls", StringComparison.OrdinalIgnoreCase)
-                    ? (IWorkbook)new HSSFWorkbook(fs) : new XSSFWorkbook(fs);
                 var sheet = wb.GetSheetAt(sheetIndex);
                 var row0 = sheet.GetRow(sheet.FirstRowNum);
                 if (row0 == null) return headers;
@@ -47,9 +47,9 @@ namespace MultiToolWin.Utils
         {
             var result = new List<string>();
             using (var fs = File.OpenRead(path))
+            using (IWorkbook wb = Path.GetExtension(path).Equals(".xls", StringComparison.OrdinalIgnoreCase)
+                ? (IWorkbook)new HSSFWorkbook(fs) : new XSSFWorkbook(fs))
             {
-                IWorkbook wb = Path.GetExtension(path).Equals(".xls", StringComparison.OrdinalIgnoreCase)
-                    ? (IWorkbook)new HSSFWorkbook(fs) : new XSSFWorkbook(fs);
                 var sheet = wb.GetSheetAt(sheetIndex);
                 if (sheet == null) return result;
 
@@ -76,27 +76,29 @@ namespace MultiToolWin.Utils
         // ---------- 批量重命名：导出/读取映射 ----------
         public static void ExportSubfolders(string root, string xlsxPath)
         {
-            var wb = new XSSFWorkbook();
-            var sh = wb.CreateSheet("Folders");
-            var header = sh.CreateRow(0);
-            header.CreateCell(0).SetCellValue("OldFolder");
-            header.CreateCell(1).SetCellValue("NewFolder");
-
-            // 取顶层子文件夹并按“自然排序”排名字：1,2,3,10,200...
-            var dirs = Directory.GetDirectories(root);
-            Array.Sort(dirs, (a, b) =>
-                new NaturalStringComparer().Compare(Path.GetFileName(a), Path.GetFileName(b)));
-
-            int r = 1;
-            foreach (var d in dirs)
+            using (var wb = new XSSFWorkbook())
             {
-                var row = sh.CreateRow(r++);
-                row.CreateCell(0).SetCellValue(Path.GetFileName(d));
-            }
+                var sh = wb.CreateSheet("Folders");
+                var header = sh.CreateRow(0);
+                header.CreateCell(0).SetCellValue("OldFolder");
+                header.CreateCell(1).SetCellValue("NewFolder");
 
-            using (var fs = File.Create(xlsxPath))
-            {
-                wb.Write(fs);
+                // 取顶层子文件夹并按“自然排序”排名字：1,2,3,10,200...
+                var dirs = Directory.GetDirectories(root);
+                Array.Sort(dirs, (a, b) =>
+                    new NaturalStringComparer().Compare(Path.GetFileName(a), Path.GetFileName(b)));
+
+                int r = 1;
+                foreach (var d in dirs)
+                {
+                    var row = sh.CreateRow(r++);
+                    row.CreateCell(0).SetCellValue(Path.GetFileName(d));
+                }
+
+                using (var fs = File.Create(xlsxPath))
+                {
+                    wb.Write(fs);
+                }
             }
         }
 
@@ -199,9 +201,9 @@ namespace MultiToolWin.Utils
         {
             var plan = new List<ExtractPlanRow>();
             using (var fs = File.OpenRead(xlsxPath))
+            using (IWorkbook wb = Path.GetExtension(xlsxPath).Equals(".xls", StringComparison.OrdinalIgnoreCase)
+                ? (IWorkbook)new HSSFWorkbook(fs) : new XSSFWorkbook(fs))
             {
-                IWorkbook wb = Path.GetExtension(xlsxPath).Equals(".xls", StringComparison.OrdinalIgnoreCase)
-                    ? (IWorkbook)new HSSFWorkbook(fs) : new XSSFWorkbook(fs);
                 var sh = wb.GetSheetAt(0);
                 if (sh == null) return plan;
                 var header = sh.GetRow(sh.FirstRowNum);

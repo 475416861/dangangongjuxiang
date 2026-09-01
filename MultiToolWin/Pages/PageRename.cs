@@ -49,51 +49,55 @@ namespace MultiToolWin.Pages
         }
         private void ExportListToExcel(List<string> items, string filePath, string sheetName)
         {
-            var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook();
-            var sheet = workbook.CreateSheet(sheetName);
-
-            // 表头
-            var header = sheet.CreateRow(0);
-            header.CreateCell(0).SetCellValue("旧名称");
-            header.CreateCell(1).SetCellValue("新名称");
-
-            // 内容
-            for (int i = 0; i < items.Count; i++)
+            using (var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook())
             {
-                var row = sheet.CreateRow(i + 1);
-                row.CreateCell(0).SetCellValue(items[i]);
-                row.CreateCell(1).SetCellValue(""); // 新名称列留空，供人工填写
-            }
+                var sheet = workbook.CreateSheet(sheetName);
 
-            using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
-            {
-                workbook.Write(fs);
+                // 表头
+                var header = sheet.CreateRow(0);
+                header.CreateCell(0).SetCellValue("旧名称");
+                header.CreateCell(1).SetCellValue("新名称");
+
+                // 内容
+                for (int i = 0; i < items.Count; i++)
+                {
+                    var row = sheet.CreateRow(i + 1);
+                    row.CreateCell(0).SetCellValue(items[i]);
+                    row.CreateCell(1).SetCellValue(""); // 新名称列留空，供人工填写
+                }
+
+                using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+                {
+                    workbook.Write(fs);
+                }
             }
         }
 
         private Dictionary<string, string> LoadMapFromExcel(string filePath)
         {
             var map = new Dictionary<string, string>();
-            var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook(filePath);
-            var sheet = workbook.GetSheetAt(0);
-
-            // 从第1行开始读（跳过表头）
-            for (int i = 1; i <= sheet.LastRowNum; i++)
+            using (var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook(filePath))
             {
-                var row = sheet.GetRow(i);
-                if (row == null) continue;
+                var sheet = workbook.GetSheetAt(0);
 
-                var oldCell = row.GetCell(0);
-                var newCell = row.GetCell(1);
-
-                if (oldCell == null) continue;
-
-                var oldName = oldCell.ToString().Trim();
-                var newName = newCell?.ToString().Trim() ?? "";
-
-                if (!string.IsNullOrEmpty(oldName))
+                // 从第1行开始读（跳过表头）
+                for (int i = 1; i <= sheet.LastRowNum; i++)
                 {
-                    map[oldName] = newName;
+                    var row = sheet.GetRow(i);
+                    if (row == null) continue;
+
+                    var oldCell = row.GetCell(0);
+                    var newCell = row.GetCell(1);
+
+                    if (oldCell == null) continue;
+
+                    var oldName = oldCell.ToString().Trim();
+                    var newName = newCell?.ToString().Trim() ?? "";
+
+                    if (!string.IsNullOrEmpty(oldName))
+                    {
+                        map[oldName] = newName;
+                    }
                 }
             }
 
@@ -478,6 +482,17 @@ namespace MultiToolWin.Pages
 
                         // ✅ 记住路径
                         lastExportPath = sfd.FileName;
+                    }
+                    catch (IOException ex)
+                    {
+                        if (File.Exists(sfd.FileName))
+                            LogEx("导出失败：文件可能正在被 Excel/WPS 或其他程序使用，请关闭相关程序后重试。");
+                        else
+                            LogEx("导出失败（文件读写错误）：" + ex.Message);
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        LogEx("导出失败：没有权限访问目标文件，请检查目录权限或文件是否为只读。" + Environment.NewLine + ex.Message);
                     }
                     catch (Exception ex)
                     {
