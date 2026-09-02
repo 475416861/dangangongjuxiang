@@ -26,18 +26,17 @@ namespace MultiToolWin.Pages
         private string _folderColName = null;
         private string _expectedColName = null;
 
-        private enum CompareStructure
-        {
-            Unknown,
-            OneLevel,
-            TwoLevel
-        }
-
         private sealed class CompareTarget
         {
             public string FullPath { get; set; }
             public string RelativePath { get; set; }
             public string Name { get; set; }
+        }
+
+        private sealed class CompareTargetResolution
+        {
+            public CompareTarget Target { get; set; }
+            public string Status { get; set; }
         }
 
         public PageCompare(Action<string> logger)
@@ -263,74 +262,32 @@ namespace MultiToolWin.Pages
             var useGIF = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("GIF"));
             var usePDF = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("PDF"));
 
-            var selectedExtensions = GetSelectedExtensions(useJPG, usePNG, useTIF, useGIF, usePDF);
-            if (selectedExtensions.Count == 0)
-            {
-                Log("未勾选参与统计的格式，无法识别目录结构。");
-                return;
-            }
-
-            int volumeCount;
-            List<CompareTarget> targets;
-            var structure = DetectCompareStructure(root, selectedExtensions, out targets, out volumeCount);
-            if (structure == CompareStructure.Unknown)
-            {
-                Log("目录结构无法识别，已停止本次校对。");
-                return;
-            }
-
-            if (structure == CompareStructure.OneLevel)
-            {
-                Log("已识别目录结构：根目录 → 件目录 → 图片");
-                Log($"发现校对目录：{targets.Count} 个");
-            }
-            else
-            {
-                Log("已识别目录结构：根目录 → 卷目录 → 件目录 → 图片");
-                Log($"发现卷目录：{volumeCount} 个");
-                Log($"发现件目录：{targets.Count} 个");
-            }
+            var targets = CollectCompareTargets(root);
+            if (targets == null) return;
+            Log($"已在根目录前两层发现 {targets.Count} 个可校对目录。");
 
             grid.Rows.Clear();
             int match = 0;
 
             foreach (var (folder, expected) in rows)
             {
-                string dir;
-                bool targetResolved = true;
-                string relativePath = folder;
-
-                if (structure == CompareStructure.OneLevel)
+                var resolution = ResolveCompareTarget(root, folder, targets);
+                if (resolution.Target == null)
                 {
-                    // 保持旧逻辑：Excel 文件夹名直接对应根目录下的第一层目录。
-                    dir = Path.Combine(root, folder);
-                }
-                else
-                {
-                    var target = ResolveTwoLevelTarget(root, folder, targets);
-                    targetResolved = target != null;
-                    dir = targetResolved ? target.FullPath : null;
-                    if (targetResolved) relativePath = target.RelativePath;
+                    grid.Rows.Add(folder, expected, "—", "—", resolution.Status);
+                    continue;
                 }
 
-                int actual = 0;
-                if (targetResolved && Directory.Exists(dir))
-                {
-                    actual = CountActual(dir, useJPG, usePNG, useTIF, useGIF, usePDF);
-                }
-                else if (structure == CompareStructure.OneLevel)
-                {
-                    Log($"目录不存在：{dir}");
-                }
+                var actual = CountActual(resolution.Target.FullPath, useJPG, usePNG, useTIF, useGIF, usePDF);
 
                 int diff = actual - expected;
-                bool ok = targetResolved && diff == 0;
+                bool ok = diff == 0;
                 if (ok) match++;
 
                 grid.Rows.Add(folder, expected, actual, diff, ok ? "✔" : "✖");
 
-                if (structure == CompareStructure.TwoLevel && targetResolved && !ok)
-                    Log($"数量不一致：{relativePath}，应有：{expected}，实际：{actual}");
+                if (!ok)
+                    Log($"数量不一致：{resolution.Target.RelativePath}，应有：{expected}，实际：{actual}，差值：{diff}");
             }
 
             Log($"对比完成：共 {rows.Count} 行，其中匹配 {match} 行。");
@@ -513,91 +470,24 @@ namespace MultiToolWin.Pages
             return 0;
         }
 
-        private static List<string> GetSelectedExtensions(bool useJPG, bool usePNG, bool useTIF, bool useGIF, bool usePDF)
+        private List<CompareTarget> CollectCompareTargets(string root)
         {
-            var extensions = new List<string>();
-            if (useJPG) extensions.AddRange(new[] { ".jpg", ".jpeg" });
-            if (usePNG) extensions.Add(".png");
-            if (useTIF) extensions.AddRange(new[] { ".tif", ".tiff" });
-            if (useGIF) extensions.Add(".gif");
-            if (usePDF) extensions.Add(".pdf");
-            return extensions;
-        }
-
-        private CompareStructure DetectCompareStructure(string root, IEnumerable<string> selectedExtensions, out List<CompareTarget> targets, out int volumeCount)
-        {
-            targets = new List<CompareTarget>();
-            volumeCount = 0;
-
-            string[] levelOneDirectories;
             try
             {
-                levelOneDirectories = Directory.GetDirectories(root);
-            }
-            catch (Exception ex)
-            {
-                Log($"读取根目录失败：{ex.Message}");
-                return CompareStructure.Unknown;
-            }
-
-            if (levelOneDirectories.Length == 0)
-            {
-                Log("目录结构无法识别：根目录下没有子文件夹。");
-                return CompareStructure.Unknown;
-            }
-
-            var extensionSet = new HashSet<string>(selectedExtensions, StringComparer.OrdinalIgnoreCase);
-            var firstLevelWithFiles = new List<string>();
-            var allSecondLevelDirectories = new List<string>();
-            var secondLevelWithFiles = new List<string>();
-
-            try
-            {
-                foreach (var firstLevelDirectory in levelOneDirectories)
+                var targets = new List<CompareTarget>();
+                foreach (var firstLevelDirectory in Directory.GetDirectories(root))
                 {
-                    if (ContainsSelectedFiles(firstLevelDirectory, extensionSet))
-                        firstLevelWithFiles.Add(firstLevelDirectory);
-
-                    var secondLevelDirectories = Directory.GetDirectories(firstLevelDirectory);
-                    foreach (var secondLevelDirectory in secondLevelDirectories)
-                    {
-                        allSecondLevelDirectories.Add(secondLevelDirectory);
-                        if (ContainsSelectedFiles(secondLevelDirectory, extensionSet))
-                            secondLevelWithFiles.Add(secondLevelDirectory);
-                    }
+                    targets.Add(CreateCompareTarget(root, firstLevelDirectory));
+                    foreach (var secondLevelDirectory in Directory.GetDirectories(firstLevelDirectory))
+                        targets.Add(CreateCompareTarget(root, secondLevelDirectory));
                 }
+                return targets;
             }
             catch (Exception ex)
             {
-                Log($"读取子目录失败：{ex.Message}");
-                return CompareStructure.Unknown;
+                Log($"读取根目录前两层文件夹失败：{ex.Message}");
+                return null;
             }
-
-            if (firstLevelWithFiles.Count > 0 && secondLevelWithFiles.Count == 0)
-            {
-                targets = levelOneDirectories.Select(directory => CreateCompareTarget(root, directory)).ToList();
-                return CompareStructure.OneLevel;
-            }
-
-            if (firstLevelWithFiles.Count == 0 && secondLevelWithFiles.Count > 0)
-            {
-                volumeCount = levelOneDirectories.Length;
-                targets = allSecondLevelDirectories.Select(directory => CreateCompareTarget(root, directory)).ToList();
-                return CompareStructure.TwoLevel;
-            }
-
-            if (firstLevelWithFiles.Count > 0 && secondLevelWithFiles.Count > 0)
-                Log("目录结构无法识别：第一层和第二层目录中都发现了参与统计的文件。");
-            else
-                Log("目录结构无法识别：前两层目录中均未发现参与统计的文件。");
-
-            return CompareStructure.Unknown;
-        }
-
-        private static bool ContainsSelectedFiles(string directory, ISet<string> selectedExtensions)
-        {
-            return Directory.GetFiles(directory)
-                .Any(file => selectedExtensions.Contains(Path.GetExtension(file)));
         }
 
         private static CompareTarget CreateCompareTarget(string root, string directory)
@@ -614,7 +504,7 @@ namespace MultiToolWin.Pages
             };
         }
 
-        private CompareTarget ResolveTwoLevelTarget(string root, string excelValue, List<CompareTarget> targets)
+        private CompareTargetResolution ResolveCompareTarget(string root, string excelValue, List<CompareTarget> targets)
         {
             if (excelValue.IndexOf('\\') >= 0 || excelValue.IndexOf('/') >= 0)
             {
@@ -622,27 +512,34 @@ namespace MultiToolWin.Pages
                 if (!TryNormalizeRelativePath(root, excelValue, out relativePath))
                 {
                     Log($"无效相对路径：{excelValue}");
-                    return null;
+                    return new CompareTargetResolution { Status = "无效路径" };
                 }
 
                 var exactTarget = targets.FirstOrDefault(target =>
                     string.Equals(target.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
                 if (exactTarget == null)
-                    Log($"未找到件目录：{relativePath}");
-                return exactTarget;
+                {
+                    Log($"未找到：{relativePath}");
+                    return new CompareTargetResolution { Status = "未找到文件夹" };
+                }
+                return new CompareTargetResolution { Target = exactTarget };
             }
 
             var candidates = targets
                 .Where(target => string.Equals(target.Name, excelValue, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            if (candidates.Count == 1) return candidates[0];
+            if (candidates.Count == 1) return new CompareTargetResolution { Target = candidates[0] };
 
             if (candidates.Count == 0)
-                Log($"未找到件目录：{excelValue}");
+            {
+                Log($"未找到：{excelValue}");
+                return new CompareTargetResolution { Status = "未找到文件夹" };
+            }
             else
-                Log($"名称不唯一，无法定位：{excelValue}。候选路径：{string.Join("、", candidates.Select(target => target.RelativePath))}");
-
-            return null;
+            {
+                Log($"名称“{excelValue}”存在多个匹配目录：{string.Join("、", candidates.Select(target => target.RelativePath))}。请在Excel A列填写相对路径进行精确匹配。");
+                return new CompareTargetResolution { Status = "名称重复" };
+            }
         }
 
         private static bool TryNormalizeRelativePath(string root, string value, out string relativePath)
@@ -652,15 +549,22 @@ namespace MultiToolWin.Pages
             if (input.Length == 0 || Path.IsPathRooted(input)) return false;
 
             var parts = input.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0 || parts.Any(part => part == "." || part == "..")) return false;
+            if (parts.Length == 0 || parts.Length > 2 || parts.Any(part => part == "." || part == "..")) return false;
 
-            var rootPrefix = GetRootPathPrefix(root);
-            var combinedPath = Path.Combine(rootPrefix, string.Join(Path.DirectorySeparatorChar.ToString(), parts));
-            var fullPath = Path.GetFullPath(combinedPath);
-            if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+            try
+            {
+                var rootPrefix = GetRootPathPrefix(root);
+                var combinedPath = Path.Combine(rootPrefix, string.Join(Path.DirectorySeparatorChar.ToString(), parts));
+                var fullPath = Path.GetFullPath(combinedPath);
+                if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) return false;
 
-            relativePath = fullPath.Substring(rootPrefix.Length);
-            return true;
+                relativePath = fullPath.Substring(rootPrefix.Length);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static string GetRootPathPrefix(string root)
