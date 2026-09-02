@@ -21,7 +21,7 @@ namespace MultiToolWin.Pages
 
         // 功能A
         private Button btnExportExcel, btnApplyExcel;
-        private RadioButton rdoFolderMode, rdoFileMode;
+        private RadioButton rdoFolderMode, rdoFileMode, rdoTwoLevelFolderMode;
 
         // 功能B
         private TextBox txtSep;
@@ -39,6 +39,19 @@ namespace MultiToolWin.Pages
         // 日志保存：内存里保留全量，UI只显示最新10条
         private List<string> allLogs = new List<string>();
         private int maxUiLogLines = 10;
+
+        private sealed class RenameMapRow
+        {
+            public string OldName { get; set; }
+            public string NewName { get; set; }
+            public string OriginalRelativePath { get; set; }
+        }
+
+        private sealed class TwoLevelFolderItem
+        {
+            public string Name { get; set; }
+            public string RelativePath { get; set; }
+        }
 
 
 
@@ -73,6 +86,61 @@ namespace MultiToolWin.Pages
             }
         }
 
+        private void ExportTwoLevelFolderListToExcel(string root, string filePath)
+        {
+            var comparer = new NaturalStringComparer();
+            var items = new List<TwoLevelFolderItem>();
+            var volumes = Directory.GetDirectories(root)
+                .OrderBy(path => Path.GetFileName(path), comparer)
+                .ToArray();
+
+            foreach (var volume in volumes)
+            {
+                var volumeName = Path.GetFileName(volume);
+                items.Add(new TwoLevelFolderItem
+                {
+                    Name = volumeName,
+                    RelativePath = volumeName
+                });
+
+                var folders = Directory.GetDirectories(volume)
+                    .OrderBy(path => Path.GetFileName(path), comparer);
+                foreach (var folder in folders)
+                {
+                    items.Add(new TwoLevelFolderItem
+                    {
+                        Name = Path.GetFileName(folder),
+                        RelativePath = Path.Combine(volumeName, Path.GetFileName(folder))
+                    });
+                }
+            }
+
+            using (var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook())
+            {
+                var sheet = workbook.CreateSheet("两层文件夹清单");
+                var header = sheet.CreateRow(0);
+                header.CreateCell(0).SetCellValue("旧名称");
+                header.CreateCell(1).SetCellValue("新名称");
+                header.CreateCell(2).SetCellValue("原始相对路径");
+
+                for (int i = 0; i < items.Count; i++)
+                {
+                    var row = sheet.CreateRow(i + 1);
+                    row.CreateCell(0).SetCellValue(items[i].Name);
+                    row.CreateCell(1).SetCellValue(string.Empty);
+                    row.CreateCell(2).SetCellValue(items[i].RelativePath);
+                }
+
+                sheet.SetColumnHidden(2, true);
+                using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+                {
+                    workbook.Write(fs);
+                }
+            }
+
+            LogEx($"导出两层文件夹清单成功，共 {volumes.Length} 个卷目录、{items.Count - volumes.Length} 个件目录。");
+        }
+
         private Dictionary<string, string> LoadMapFromExcel(string filePath)
         {
             var map = new Dictionary<string, string>();
@@ -102,6 +170,54 @@ namespace MultiToolWin.Pages
             }
 
             return map;
+        }
+
+        private List<RenameMapRow> LoadTwoLevelRenameRows(string filePath, out bool hasOriginalRelativePathColumn)
+        {
+            var rows = new List<RenameMapRow>();
+            hasOriginalRelativePathColumn = false;
+
+            using (var stream = File.OpenRead(filePath))
+            using (var workbook = new NPOI.XSSF.UserModel.XSSFWorkbook(stream))
+            {
+                var sheet = workbook.GetSheetAt(0);
+                var header = sheet?.GetRow(sheet.FirstRowNum);
+                if (header == null) return rows;
+
+                int pathColumn = -1;
+                for (int column = header.FirstCellNum; column < header.LastCellNum; column++)
+                {
+                    var headerValue = header.GetCell(column)?.ToString()?.Trim();
+                    if (string.Equals(headerValue, "原始相对路径", StringComparison.OrdinalIgnoreCase))
+                    {
+                        pathColumn = column;
+                        hasOriginalRelativePathColumn = true;
+                        break;
+                    }
+                }
+
+                if (!hasOriginalRelativePathColumn) return rows;
+
+                for (int rowIndex = sheet.FirstRowNum + 1; rowIndex <= sheet.LastRowNum; rowIndex++)
+                {
+                    var row = sheet.GetRow(rowIndex);
+                    if (row == null) continue;
+
+                    var oldName = row.GetCell(0)?.ToString()?.Trim() ?? string.Empty;
+                    var newName = row.GetCell(1)?.ToString()?.Trim() ?? string.Empty;
+                    var relativePath = row.GetCell(pathColumn)?.ToString()?.Trim() ?? string.Empty;
+                    if (string.IsNullOrEmpty(oldName) && string.IsNullOrEmpty(relativePath)) continue;
+
+                    rows.Add(new RenameMapRow
+                    {
+                        OldName = oldName,
+                        NewName = newName,
+                        OriginalRelativePath = relativePath
+                    });
+                }
+            }
+
+            return rows;
         }
         private List<FileInfo> CollectTargetFiles(string root)
         {
@@ -291,12 +407,14 @@ namespace MultiToolWin.Pages
             panelA.Controls.Add(new Label { Text = "【功能A：Excel 映射】", AutoSize = true, Font = new Font("微软雅黑", 10, FontStyle.Bold) });
             rdoFolderMode = new RadioButton { Text = "导出文件夹清单", Checked = true, AutoSize = true, Margin = new Padding(20, 3, 10, 3) };
             rdoFileMode = new RadioButton { Text = "导出文件清单", AutoSize = true, Margin = new Padding(0, 3, 10, 3) };
+            rdoTwoLevelFolderMode = new RadioButton { Text = "两层文件夹清单", AutoSize = true, Margin = new Padding(0, 3, 10, 3) };
             btnExportExcel = new Button { Text = "导出Excel", Width = 100, Height = 28 };
             btnApplyExcel = new Button { Text = "应用Excel映射", Width = 120, Height = 28 };
             btnExportExcel.Click += BtnExportExcel_Click;
             btnApplyExcel.Click += BtnApplyExcel_Click;
             panelA.Controls.Add(rdoFolderMode);
             panelA.Controls.Add(rdoFileMode);
+            panelA.Controls.Add(rdoTwoLevelFolderMode);
             panelA.Controls.Add(btnExportExcel);
             panelA.Controls.Add(btnApplyExcel);
             layout.Controls.Add(panelA);
@@ -463,7 +581,11 @@ namespace MultiToolWin.Pages
                 {
                     try
                     {
-                        if (rdoFolderMode.Checked)
+                        if (rdoTwoLevelFolderMode.Checked)
+                        {
+                            ExportTwoLevelFolderListToExcel(root, sfd.FileName);
+                        }
+                        else if (rdoFolderMode.Checked)
                         {
                             var folders = Directory.GetDirectories(root)
                                 .OrderBy(path => Path.GetFileName(path), new NaturalStringComparer())
@@ -536,6 +658,14 @@ namespace MultiToolWin.Pages
 
             try
             {
+                bool hasOriginalRelativePathColumn;
+                var twoLevelRows = LoadTwoLevelRenameRows(pathToUse, out hasOriginalRelativePathColumn);
+                if (hasOriginalRelativePathColumn)
+                {
+                    ApplyTwoLevelExcelMap(root, twoLevelRows);
+                    return;
+                }
+
                 var map = LoadMapFromExcel(pathToUse);
 
                 int success = 0, skip = 0, fail = 0;
@@ -600,6 +730,124 @@ namespace MultiToolWin.Pages
             {
                 LogEx("应用Excel映射失败：" + ex.Message);
             }
+        }
+
+        private void ApplyTwoLevelExcelMap(string root, List<RenameMapRow> rows)
+        {
+            int success = 0, skip = 0, fail = 0;
+
+            foreach (var row in rows.OrderByDescending(item => GetRelativePathDepth(item.OriginalRelativePath)))
+            {
+                var displayPath = string.IsNullOrWhiteSpace(row.OriginalRelativePath)
+                    ? row.OldName
+                    : row.OriginalRelativePath;
+
+                if (string.IsNullOrWhiteSpace(row.NewName))
+                {
+                    skip++;
+                    LogEx($"跳过：{displayPath}（未填写新名称）");
+                    continue;
+                }
+
+                if (!IsSafeFolderName(row.NewName))
+                {
+                    fail++;
+                    LogEx($"失败：{displayPath} → {row.NewName}，新名称必须是有效的单个文件夹名称。");
+                    continue;
+                }
+
+                string oldDirectory;
+                string normalizedRelativePath;
+                if (!TryResolveTwoLevelDirectory(root, row.OriginalRelativePath, out oldDirectory, out normalizedRelativePath))
+                {
+                    fail++;
+                    LogEx($"失败：{displayPath} → {row.NewName}，原始相对路径无效或超出根目录。");
+                    continue;
+                }
+
+                if (!Directory.Exists(oldDirectory))
+                {
+                    fail++;
+                    LogEx($"失败：{normalizedRelativePath} → {row.NewName}，原目录不存在。");
+                    continue;
+                }
+
+                try
+                {
+                    var parentDirectory = Directory.GetParent(oldDirectory)?.FullName;
+                    var newDirectory = Path.Combine(parentDirectory, row.NewName);
+                    if (Directory.Exists(newDirectory) || File.Exists(newDirectory))
+                    {
+                        skip++;
+                        LogEx($"跳过：{normalizedRelativePath} → {row.NewName}，目标已存在。");
+                        continue;
+                    }
+
+                    Directory.Move(oldDirectory, newDirectory);
+                    success++;
+                    LogEx($"文件夹重命名成功：{normalizedRelativePath} → {row.NewName}");
+                }
+                catch (Exception ex)
+                {
+                    fail++;
+                    LogEx($"失败：{normalizedRelativePath} → {row.NewName}，{ex.Message}");
+                }
+            }
+
+            LogEx($"两层文件夹映射完成：成功 {success}，跳过 {skip}，失败 {fail}");
+        }
+
+        private static int GetRelativePathDepth(string relativePath)
+        {
+            return (relativePath ?? string.Empty)
+                .Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries)
+                .Length;
+        }
+
+        private static bool IsSafeFolderName(string folderName)
+        {
+            if (string.IsNullOrWhiteSpace(folderName)) return false;
+            if (folderName == "." || folderName == "..") return false;
+            if (Path.IsPathRooted(folderName)) return false;
+            if (folderName.IndexOf('\\') >= 0 || folderName.IndexOf('/') >= 0) return false;
+            if (folderName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return false;
+            return !folderName.EndsWith(".", StringComparison.Ordinal) && !folderName.EndsWith(" ", StringComparison.Ordinal);
+        }
+
+        private static bool TryResolveTwoLevelDirectory(string root, string relativePath, out string directory, out string normalizedRelativePath)
+        {
+            directory = null;
+            normalizedRelativePath = null;
+
+            var input = (relativePath ?? string.Empty).Trim();
+            if (input.Length == 0 || Path.IsPathRooted(input)) return false;
+
+            var parts = input.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0 || parts.Length > 2 || parts.Any(part => part == "." || part == "..")) return false;
+
+            try
+            {
+                var rootPrefix = GetRootPathPrefix(root);
+                var fullPath = Path.GetFullPath(Path.Combine(rootPrefix, string.Join(Path.DirectorySeparatorChar.ToString(), parts)));
+                if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+
+                directory = fullPath;
+                normalizedRelativePath = fullPath.Substring(rootPrefix.Length);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetRootPathPrefix(string root)
+        {
+            var rootPath = Path.GetFullPath(root);
+            return rootPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                || rootPath.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? rootPath
+                : rootPath + Path.DirectorySeparatorChar;
         }
 
 
