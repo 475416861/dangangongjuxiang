@@ -383,45 +383,58 @@ namespace MultiToolWin.Pages
         private void BuildUI()
         {
             this.Dock = DockStyle.Fill;
+            this.Font = new Font("Microsoft YaHei UI", 9F);
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 4,
-                AutoSize = true
+                Padding = new Padding(8),
+                AutoScroll = true
             };
-            this.Controls.Add(layout);
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            // 根目录选择
-            var panelRoot = new FlowLayoutPanel { AutoSize = true };
-            txtRoot = new TextBox { Width = 400 };
-            btnPickRoot = new Button { Text = "选择目录" };
+            // 根目录实际首选高度为 64px；使用默认 100px 会挤占执行进度区域。
+            var rootGroup = new GroupBox { Text = "工作目录", Dock = DockStyle.Fill, Height = 64, Padding = new Padding(8), Margin = new Padding(0, 0, 0, 4) };
+            var rootLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3 };
+            rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 86));
+            rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+            rootLayout.Controls.Add(new Label { Text = "根目录：", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(0, 4, 8, 4) }, 0, 0);
+            txtRoot = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(0, 4, 8, 4) };
+            btnPickRoot = new Button { Text = "浏览…", Width = 80, Height = 26, FlatStyle = FlatStyle.System, Margin = new Padding(0, 3, 0, 3) };
             btnPickRoot.Click += BtnPickRoot_Click;
-            panelRoot.Controls.Add(new Label { Text = "根目录：" });
-            panelRoot.Controls.Add(txtRoot);
-            panelRoot.Controls.Add(btnPickRoot);
-            layout.Controls.Add(panelRoot);
+            rootLayout.Controls.Add(txtRoot, 1, 0);
+            rootLayout.Controls.Add(btnPickRoot, 2, 0);
+            rootGroup.Controls.Add(rootLayout);
+            layout.Controls.Add(rootGroup, 0, 0);
 
-            // 功能A
-            var panelA = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
-            panelA.Controls.Add(new Label { Text = "【功能A：Excel 映射】", AutoSize = true, Font = new Font("微软雅黑", 10, FontStyle.Bold) });
-            rdoFolderMode = new RadioButton { Text = "导出文件夹清单", Checked = true, AutoSize = true, Margin = new Padding(20, 3, 10, 3) };
+            var groupA = new GroupBox { Text = "功能A：Excel 映射", Dock = DockStyle.Fill, Padding = new Padding(8), Margin = new Padding(0, 0, 0, 8) };
+            var layoutA = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
+            rdoFolderMode = new RadioButton { Text = "导出文件夹清单", Checked = true, AutoSize = true, Margin = new Padding(0, 3, 12, 3) };
             rdoFileMode = new RadioButton { Text = "导出文件清单", AutoSize = true, Margin = new Padding(0, 3, 10, 3) };
             rdoTwoLevelFolderMode = new RadioButton { Text = "两层文件夹清单", AutoSize = true, Margin = new Padding(0, 3, 10, 3) };
-            btnExportExcel = new Button { Text = "导出Excel", Width = 100, Height = 28 };
-            btnApplyExcel = new Button { Text = "应用Excel映射", Width = 120, Height = 28 };
+            btnExportExcel = new Button { Text = "导出Excel", Width = 100, Height = 28, FlatStyle = FlatStyle.System };
+            btnApplyExcel = new Button { Text = "应用Excel映射", Width = 120, Height = 28, FlatStyle = FlatStyle.System };
             btnExportExcel.Click += BtnExportExcel_Click;
             btnApplyExcel.Click += BtnApplyExcel_Click;
-            panelA.Controls.Add(rdoFolderMode);
-            panelA.Controls.Add(rdoFileMode);
-            panelA.Controls.Add(rdoTwoLevelFolderMode);
-            panelA.Controls.Add(btnExportExcel);
-            panelA.Controls.Add(btnApplyExcel);
-            layout.Controls.Add(panelA);
+            var modesPanel = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = false };
+            modesPanel.Controls.Add(rdoFolderMode);
+            modesPanel.Controls.Add(rdoFileMode);
+            modesPanel.Controls.Add(rdoTwoLevelFolderMode);
+            var mappingButtons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 6, 0, 0) };
+            mappingButtons.Controls.Add(btnApplyExcel);
+            mappingButtons.Controls.Add(btnExportExcel);
+            layoutA.Controls.Add(modesPanel, 0, 0);
+            layoutA.Controls.Add(mappingButtons, 0, 1);
+            groupA.Controls.Add(layoutA);
+            layout.Controls.Add(groupA, 0, 1);
 
-            // 功能B
-            var panelB = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown };
-            panelB.Controls.Add(new Label { Text = "【功能B：规则改名】", AutoSize = true, Font = new Font("微软雅黑", 10, FontStyle.Bold) });
+            var groupB = new GroupBox { Text = "功能B：规则改名", Dock = DockStyle.Fill, Padding = new Padding(8), Margin = new Padding(0, 0, 0, 8) };
+            var layoutB = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1 };
 
             // 层级模式
             var lblLevelMode = new Label
@@ -436,12 +449,13 @@ namespace MultiToolWin.Pages
             var panelLevel = new FlowLayoutPanel
             {
                 AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight
+                FlowDirection = FlowDirection.LeftToRight,
+                Dock = DockStyle.Top
             };
             panelLevel.Controls.Add(lblLevelMode);
             panelLevel.Controls.Add(rdoLevel1);
             panelLevel.Controls.Add(rdoLevel2);
-            panelB.Controls.Add(panelLevel);
+            layoutB.Controls.Add(panelLevel, 0, 0);
 
             // 连接符 + 位数 + 起始号
             var lblSep = new Label
@@ -491,7 +505,8 @@ namespace MultiToolWin.Pages
             var panelSep = new FlowLayoutPanel
             {
                 AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight
+                FlowDirection = FlowDirection.LeftToRight,
+                Dock = DockStyle.Top
             };
             panelSep.Controls.Add(lblSep);
             panelSep.Controls.Add(txtSep);
@@ -500,12 +515,12 @@ namespace MultiToolWin.Pages
             panelSep.Controls.Add(lblStart);
             panelSep.Controls.Add(numStart);
 
-            panelB.Controls.Add(panelSep);
+            layoutB.Controls.Add(panelSep, 0, 1);
 
 
 
             // 处理范围
-            var panelScope = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown };
+            var panelScope = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, Dock = DockStyle.Top, Padding = new Padding(0, 4, 0, 0) };
             rdoAllTypes = new RadioButton { Text = "所有支持的文件类型", Checked = true, AutoSize = true };
             rdoSelectTypes = new RadioButton { Text = "仅选中的文件类型：", AutoSize = true };
             var panelTypes = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
@@ -521,36 +536,44 @@ namespace MultiToolWin.Pages
             panelScope.Controls.Add(rdoAllTypes);
             panelScope.Controls.Add(rdoSelectTypes);
             panelScope.Controls.Add(panelTypes);
-            panelB.Controls.Add(panelScope);
+            layoutB.Controls.Add(panelScope, 0, 2);
 
             // 操作按钮
-            var panelOps = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
-            btnPreview = new Button { Text = "预览", Width = 100, Height = 28 };
-            btnRenameFiles = new Button { Text = "开始执行", Width = 100, Height = 28 };
-            btnStop = new Button { Text = "停止", Width = 100, Height = 28 };
+            var panelOps = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Top, Padding = new Padding(0, 6, 0, 0) };
+            btnPreview = new Button { Text = "预览", Width = 100, Height = 28, FlatStyle = FlatStyle.System };
+            btnRenameFiles = new Button { Text = "开始执行", Width = 100, Height = 28, FlatStyle = FlatStyle.System };
+            btnStop = new Button { Text = "停止", Width = 100, Height = 28, FlatStyle = FlatStyle.System };
             btnPreview.Click += (s, e) => DoPreview();
             btnRenameFiles.Click += BtnRenameFiles_Click;
             btnStop.Click += BtnStop_Click;
-            panelOps.Controls.Add(btnPreview);
-            panelOps.Controls.Add(btnRenameFiles);
             panelOps.Controls.Add(btnStop);
-            panelB.Controls.Add(panelOps);
+            panelOps.Controls.Add(btnRenameFiles);
+            panelOps.Controls.Add(btnPreview);
+            layoutB.Controls.Add(panelOps, 0, 3);
+            groupB.Controls.Add(layoutB);
+            layout.Controls.Add(groupB, 0, 2);
 
-            layout.Controls.Add(panelB);
-
-            // 进度和日志
-            progressBar = new ProgressBar { Width = 500, Height = 20 };
-            lblProgress = new Label { Text = "进度：0/0", AutoSize = true };
-            txtLog = new TextBox { Multiline = true, Width = 600, Height = 200, ScrollBars = ScrollBars.Vertical };
-            layout.Controls.Add(progressBar);
-            layout.Controls.Add(lblProgress);
-            layout.Controls.Add(txtLog);
-            var panelLogOps = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
-            var btnExportLog = new Button { Text = "导出日志", Width = 100, Height = 28 };
+            // 标题、内边距和三行固定控件合计至少需要 136px；避免底部操作行被百分比日志行挤压。
+            var logGroup = new GroupBox { Text = "执行进度", Dock = DockStyle.Fill, Padding = new Padding(8), Margin = new Padding(0, 0, 0, 8), MinimumSize = new Size(0, 136) };
+            var logLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+            logLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
+            logLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
+            logLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            logLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+            progressBar = new ProgressBar { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 4) };
+            lblProgress = new Label { Text = "进度：0/0", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+            txtLog = new TextBox { Multiline = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical, ReadOnly = true, Margin = new Padding(0, 0, 0, 4) };
+            var panelLogOps = new FlowLayoutPanel { AutoSize = false, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Dock = DockStyle.Fill, Padding = new Padding(0, 4, 0, 0), Margin = new Padding(0) };
+            var btnExportLog = new Button { Text = "导出日志", Width = 100, Height = 26, Margin = new Padding(0), FlatStyle = FlatStyle.System };
             btnExportLog.Click += BtnExportLog_Click;
             panelLogOps.Controls.Add(btnExportLog);
-            layout.Controls.Add(panelLogOps);
-
+            logLayout.Controls.Add(progressBar, 0, 0);
+            logLayout.Controls.Add(lblProgress, 0, 1);
+            logLayout.Controls.Add(txtLog, 0, 2);
+            logLayout.Controls.Add(panelLogOps, 0, 3);
+            logGroup.Controls.Add(logLayout);
+            layout.Controls.Add(logGroup, 0, 3);
+            this.Controls.Add(layout);
         }
 
         private void BtnPickRoot_Click(object sender, EventArgs e)

@@ -47,9 +47,31 @@ namespace MultiToolWin.Pages
 
         private void BuildUI()
         {
+            this.Font = new System.Drawing.Font("Microsoft YaHei UI", 9F);
             // —— 列宽常量（可微调）——
             int LABEL_COL_WIDTH = 100;  // 第0列标签固定宽
             int BUTTON_COL_WIDTH = 88;  // “浏览/打开/开始/停止”统一宽
+
+            var rootLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                Padding = new Padding(12),
+                AutoScroll = true
+            };
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            var filesGroup = new GroupBox
+            {
+                Text = "文件与目录",
+                Dock = DockStyle.Top,
+                Height = 210,
+                Padding = new Padding(8),
+                Margin = new Padding(0, 0, 0, 8)
+            };
 
             // 4列：标签 | 文本框 | 浏览按钮 | 打开按钮
             var layout = new TableLayoutPanel
@@ -57,7 +79,7 @@ namespace MultiToolWin.Pages
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
                 RowCount = 7,
-                Padding = new Padding(12)
+                Padding = new Padding(0)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LABEL_COL_WIDTH));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -92,7 +114,7 @@ namespace MultiToolWin.Pages
                     Text = text,
                     AutoSize = false,
                     Width = BUTTON_COL_WIDTH,   // 保持你原来的常量
-                    Height = 25,                // ← 新增：统一高度
+                    Height = 26,                // ← 新增：统一高度
                     Anchor = AnchorStyles.Right, // ← 新增：在单元格里靠右
                     Margin = new Padding(0, 3, 6, 3), // ← 上下留点间距，看起来居中
                     FlatStyle = FlatStyle.System
@@ -163,10 +185,12 @@ namespace MultiToolWin.Pages
                 AutoSize = true,
                 Anchor = AnchorStyles.Left,
                 Margin = new Padding(0, 3, 0, 3),
+                Padding = new Padding(0),
                 WrapContents = false
             };
-            rbCopy = new RadioButton { Text = "复制", AutoSize = true, Margin = new Padding(0, 0, 18, 0) };
-            rbMove = new RadioButton { Text = "剪切", AutoSize = true };
+            var radioMargin = new Padding(0, 0, 18, 0);
+            rbCopy = new RadioButton { Text = "复制", AutoSize = true, Margin = radioMargin };
+            rbMove = new RadioButton { Text = "剪切", AutoSize = true, Margin = radioMargin };
             rbMove.Checked = true; // 如需默认“复制”，把这行去掉
             ops.Controls.Add(rbCopy);
             ops.Controls.Add(rbMove);
@@ -174,7 +198,7 @@ namespace MultiToolWin.Pages
             layout.SetColumnSpan(ops, 3);
 
             // ⑤ 选项区：保存日志到文件
-            var panelOptions = new TableLayoutPanel { Dock = DockStyle.Top, Height = 60, ColumnCount = 2, Padding = new Padding(0, 6, 0, 0) };
+            var panelOptions = new TableLayoutPanel { Dock = DockStyle.Top, Height = 40, ColumnCount = 2, Padding = new Padding(0, 4, 0, 0) };
             panelOptions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             panelOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             chkSaveLog = new CheckBox { Text = "保存日志到文件", AutoSize = true, Anchor = AnchorStyles.Left };
@@ -221,14 +245,15 @@ namespace MultiToolWin.Pages
                     lblLogPath.Visible = false;
                 }
             };
-            lblLogPath = new Label { AutoSize = true, Visible = false, Anchor = AnchorStyles.Left, Padding = new Padding(12, 6, 0, 0) };
+            lblLogPath = new Label { AutoSize = true, Visible = false, Anchor = AnchorStyles.Left, Padding = new Padding(12, 4, 0, 0) };
             layout.Controls.Add(panelOptions, 0, 4);
             layout.SetColumnSpan(panelOptions, 4);
             panelOptions.Controls.Add(chkSaveLog, 0, 0);
             panelOptions.Controls.Add(lblLogPath, 1, 0);
 
             // ⑥ 进度区
-            var panelProgress = new TableLayoutPanel { Dock = DockStyle.Top, Height = 90, ColumnCount = 2, Padding = new Padding(0, 6, 0, 0) };
+            var progressGroup = new GroupBox { Text = "执行进度", Dock = DockStyle.Top, Height = 118, Padding = new Padding(8), Margin = new Padding(0, 6, 0, 0) };
+            var panelProgress = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
             panelProgress.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             panelProgress.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             panelProgress.Controls.Add(new Label { Text = "当前：", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
@@ -243,15 +268,14 @@ namespace MultiToolWin.Pages
             panelProgress.Controls.Add(new Label { Text = "用时：", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
             lblElapsed = new Label { Text = "00:00:00", AutoSize = true, Anchor = AnchorStyles.Left };
             panelProgress.Controls.Add(lblElapsed, 1, 3);
-            layout.Controls.Add(panelProgress, 0, 5);
-            layout.SetColumnSpan(panelProgress, 4);
+            progressGroup.Controls.Add(panelProgress);
 
             // ⑦ 按钮行
             btnStart = new Button
             {
                 Text = "提取",
                 AutoSize = false,
-                Width = 80,
+                Width = BUTTON_COL_WIDTH,
                 Height = 28,
                 Anchor = AnchorStyles.Right,
                 Margin = new Padding(0, 3, 10, 3), // ← 右边多留10px 空隙
@@ -262,7 +286,7 @@ namespace MultiToolWin.Pages
             {
                 Text = "停止",
                 AutoSize = false,
-                Width = 80,
+                Width = BUTTON_COL_WIDTH,
                 Height = 28,
                 Anchor = AnchorStyles.Right,
                 Margin = new Padding(0, 3, 10, 3), // ← 右边多留10px 空隙
@@ -279,11 +303,12 @@ namespace MultiToolWin.Pages
             };
             btnPanel.Controls.Add(btnStop);
             btnPanel.Controls.Add(btnStart);
-            layout.Controls.Add(btnPanel, 0, 6);
-            layout.SetColumnSpan(btnPanel, 4);
+            filesGroup.Controls.Add(layout);
+            rootLayout.Controls.Add(filesGroup, 0, 0);
+            rootLayout.Controls.Add(progressGroup, 0, 1);
+            rootLayout.Controls.Add(btnPanel, 0, 2);
 
-            // 装载
-            Controls.Add(layout);
+            Controls.Add(rootLayout);
         }
 
         // —— 启动/停止日志落盘（选了路径才会启用） —— 

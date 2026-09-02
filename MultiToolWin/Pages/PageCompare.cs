@@ -17,7 +17,7 @@ namespace MultiToolWin.Pages
         private Action<string> Log;
 
         private TextBox txtExcel, txtRoot;
-        private CheckedListBox chkFormats;
+        private CheckBox chkJpg, chkPng, chkTif, chkGif, chkPdf;
         private Button btnExcel, btnRoot, btnStart, btnExport;
         private DataGridView grid;
         private TableLayoutPanel _layout;
@@ -47,24 +47,35 @@ namespace MultiToolWin.Pages
 
         private void BuildUI()
         {
+            this.Font = new Font("Microsoft YaHei UI", 9F);
             _layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 3,
-                Padding = new Padding(12, 10, 12, 10)
+                ColumnCount = 1,
+                RowCount = 4,
+                Padding = new Padding(12),
+                AutoScroll = true
             };
-            _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
-            _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            _layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            // ===== 0 行：Excel 文件 =====
-            _layout.Controls.Add(new Label { Text = "Excel 文件：", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) }, 0, 0);
+            // 标题区、8px 内边距和两行 30px 控件行合计需要约 104px，避免第二行被边框裁切。
+            var inputGroup = new GroupBox { Text = "文件与目录", Dock = DockStyle.Top, Height = 104, Padding = new Padding(8), Margin = new Padding(0, 0, 0, 8) };
+            var inputLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
+            inputLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
+            inputLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            inputLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 84));
+            inputLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            inputLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 
-            txtExcel = new TextBox { Anchor = AnchorStyles.Left | AnchorStyles.Right };
+            inputLayout.Controls.Add(new Label { Text = "Excel 文件：", AutoSize = true, Anchor = AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) }, 0, 0);
+            txtExcel = new TextBox { Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) };
             UiStyle.StyleBrowseRow(txtExcel, null);
-            _layout.Controls.Add(txtExcel, 1, 0);
+            inputLayout.Controls.Add(txtExcel, 1, 0);
 
-            btnExcel = new Button { Text = "浏览…" };
+            btnExcel = new Button { Text = "浏览…", Width = 80, Height = 26, FlatStyle = FlatStyle.System, Margin = new Padding(0, 3, 0, 3) };
             UiStyle.StyleBrowseRow(null, btnExcel);
             btnExcel.Click += (s, e) =>
             {
@@ -81,52 +92,44 @@ namespace MultiToolWin.Pages
                         Log($"已自动识别：文件夹列=[{_folderColName}]，应有数量列=[{_expectedColName}]。");
                 }
             };
-            _layout.Controls.Add(btnExcel, 2, 0);
+            inputLayout.Controls.Add(btnExcel, 2, 0);
 
-            // 放大两行之间的竖向间距（覆盖 UiStyle 的默认 Margin）
-            txtExcel.Margin = new Padding(0, 6, 6, 12);
-            btnExcel.Margin = new Padding(0, 6, 0, 12);
-
-            // ===== 1 行：根目录 =====
-            _layout.Controls.Add(new Label { Text = "根目录：", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) }, 0, 1);
-
-            txtRoot = new TextBox { Anchor = AnchorStyles.Left | AnchorStyles.Right };
+            inputLayout.Controls.Add(new Label { Text = "根目录：", AutoSize = true, Anchor = AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) }, 0, 1);
+            txtRoot = new TextBox { Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) };
             UiStyle.StyleBrowseRow(txtRoot, null);
-            _layout.Controls.Add(txtRoot, 1, 1);
+            inputLayout.Controls.Add(txtRoot, 1, 1);
 
-            btnRoot = new Button { Text = "浏览…" };
+            btnRoot = new Button { Text = "浏览…", Width = 80, Height = 26, FlatStyle = FlatStyle.System, Margin = new Padding(0, 3, 0, 3) };
             UiStyle.StyleBrowseRow(null, btnRoot);
             btnRoot.Click += (s, e) =>
             {
                 using (var fbd = new FolderBrowserDialog())
                     if (fbd.ShowDialog() == DialogResult.OK) txtRoot.Text = fbd.SelectedPath;
             };
-            _layout.Controls.Add(btnRoot, 2, 1);
+            inputLayout.Controls.Add(btnRoot, 2, 1);
+            inputGroup.Controls.Add(inputLayout);
+            _layout.Controls.Add(inputGroup, 0, 0);
 
-            // 再加点与下一块的间距
-            txtRoot.Margin = new Padding(0, 6, 6, 18);
-            btnRoot.Margin = new Padding(0, 6, 0, 18);
+            var formatsGroup = new GroupBox { Text = "统计格式", Dock = DockStyle.Top, Height = 58, Padding = new Padding(8), Margin = new Padding(0, 0, 0, 8) };
+            var formatsPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 3, 0, 0) };
+            chkJpg = new CheckBox { Text = "JPG", Checked = true, AutoSize = true, Margin = new Padding(0, 0, 18, 0) };
+            chkPng = new CheckBox { Text = "PNG", Checked = true, AutoSize = true, Margin = new Padding(0, 0, 18, 0) };
+            chkTif = new CheckBox { Text = "TIF", Checked = true, AutoSize = true, Margin = new Padding(0, 0, 18, 0) };
+            chkGif = new CheckBox { Text = "GIF", Checked = true, AutoSize = true, Margin = new Padding(0, 0, 18, 0) };
+            chkPdf = new CheckBox { Text = "PDF", Checked = true, AutoSize = true };
+            formatsPanel.Controls.Add(chkJpg);
+            formatsPanel.Controls.Add(chkPng);
+            formatsPanel.Controls.Add(chkTif);
+            formatsPanel.Controls.Add(chkGif);
+            formatsPanel.Controls.Add(chkPdf);
+            formatsGroup.Controls.Add(formatsPanel);
+            _layout.Controls.Add(formatsGroup, 0, 1);
 
-            // ===== 2 行：格式统计 =====
-            _layout.Controls.Add(new Label { Text = "格式统计：", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 6, 0) }, 0, 2);
-
-            chkFormats = new CheckedListBox
-            {
-                Height = 96,
-                Margin = new Padding(0, 0, 0, 0),
-                Anchor = AnchorStyles.Left | AnchorStyles.Top
-            };
-            chkFormats.Items.AddRange(new object[] { "JPG", "PNG", "TIF", "GIF", "PDF" });
-            for (int i = 0; i < chkFormats.Items.Count; i++) chkFormats.SetItemChecked(i, true);
-            UiStyle.StyleCheckedList(chkFormats, height: 96);
-            _layout.Controls.Add(chkFormats, 1, 2);
-
-            // ===== 3 行：按钮条（新行，表格上方）=====
             btnStart = new Button
             {
                 Text = "开始对比",
-                Width = 90,
-                Height = 28,
+                Width = 88,
+                Height = 26,
                 Margin = new Padding(0, 0, 8, 0),
                 FlatStyle = FlatStyle.System
             };
@@ -135,8 +138,8 @@ namespace MultiToolWin.Pages
             btnExport = new Button
             {
                 Text = "导出",
-                Width = 90,
-                Height = 28,
+                Width = 88,
+                Height = 26,
                 Margin = new Padding(0, 0, 0, 0),
                 FlatStyle = FlatStyle.System
             };
@@ -147,20 +150,14 @@ namespace MultiToolWin.Pages
                 FlowDirection = FlowDirection.LeftToRight,
                 AutoSize = true,
                 WrapContents = false,
-                Padding = new Padding(0, 6, 0, 6),
-                Margin = new Padding(0, 6, 0, 0)
+                Padding = new Padding(0, 0, 0, 2),
+                Margin = new Padding(0, 0, 0, 8),
+                Anchor = AnchorStyles.Right
             };
             buttonsBar.Controls.Add(btnStart);
             buttonsBar.Controls.Add(btnExport);
+            _layout.Controls.Add(buttonsBar, 0, 2);
 
-            // 放到第3行第3列（索引2），自动靠右
-            buttonsBar.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            buttonsBar.Margin = new Padding(0, 6, 2, 6);
-            _layout.Controls.Add(buttonsBar, 2, 3);   // ✅ 右侧
-         
-
-
-            // ===== 4 行：结果表 =====
             grid = new DataGridView
             {
                 Dock = DockStyle.Fill,
@@ -180,7 +177,6 @@ namespace MultiToolWin.Pages
             UiStyle.StyleGrid(grid);
             grid.RowTemplate.Height = 26;
             grid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(246, 248, 250);
 
             grid.Columns[0].FillWeight = 40;
             grid.Columns[1].FillWeight = 15;
@@ -191,15 +187,15 @@ namespace MultiToolWin.Pages
             UiStyle.AlignRight(grid.Columns[1], grid.Columns[2], grid.Columns[3]);
             UiStyle.AlignCenter(grid.Columns[4]);
 
-            _layout.SetColumnSpan(grid, 3);
-            _layout.Controls.Add(grid, 0, 4);
-
-            // 行样式
-            _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // 0 Excel
-            _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // 1 根目录
-            _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // 2 格式统计
-            _layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // 3 按钮条
-            _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // 4 表格
+            var resultsGroup = new GroupBox
+            {
+                Text = "对比结果",
+                Dock = DockStyle.Fill,
+                Padding = new Padding(8),
+                Margin = new Padding(0, 6, 0, 0)
+            };
+            resultsGroup.Controls.Add(grid);
+            _layout.Controls.Add(resultsGroup, 0, 3);
 
             Controls.Add(_layout);
         }
@@ -236,6 +232,17 @@ namespace MultiToolWin.Pages
             }
         }
 
+        private List<string> GetSelectedFormats()
+        {
+            var formats = new List<string>();
+            if (chkJpg.Checked) formats.Add("JPG");
+            if (chkPng.Checked) formats.Add("PNG");
+            if (chkTif.Checked) formats.Add("TIF");
+            if (chkGif.Checked) formats.Add("GIF");
+            if (chkPdf.Checked) formats.Add("PDF");
+            return formats;
+        }
+
         private void DoCompare()
         {
             var excel = txtExcel.Text?.Trim();
@@ -256,11 +263,11 @@ namespace MultiToolWin.Pages
             if (rows.Count == 0) { Log("Excel 数据为空或映射列错误。"); return; }
 
             // 选择的格式
-            var useJPG = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("JPG"));
-            var usePNG = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("PNG"));
-            var useTIF = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("TIF"));
-            var useGIF = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("GIF"));
-            var usePDF = chkFormats.GetItemChecked(chkFormats.Items.IndexOf("PDF"));
+            var useJPG = chkJpg.Checked;
+            var usePNG = chkPng.Checked;
+            var useTIF = chkTif.Checked;
+            var useGIF = chkGif.Checked;
+            var usePDF = chkPdf.Checked;
 
             var targets = CollectCompareTargets(root);
             if (targets == null) return;
@@ -420,9 +427,7 @@ namespace MultiToolWin.Pages
                 KV("字段映射-应有数量列", _expectedColName ?? "");
 
                 // 勾选格式
-                var formats = new List<string>();
-                foreach (var item in chkFormats.CheckedItems) formats.Add(item.ToString());
-                KV("勾选的格式", string.Join(", ", formats));
+                KV("勾选的格式", string.Join(", ", GetSelectedFormats()));
 
                 // 空一行
                 r2++;

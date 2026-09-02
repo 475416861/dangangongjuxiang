@@ -42,15 +42,37 @@ namespace MultiToolWin.Pages
 
         private void BuildUI()
         {
+            this.Font = new System.Drawing.Font("Microsoft YaHei UI", 9F);
             const int LABEL_COL_WIDTH = 100;
             const int BUTTON_COL_WIDTH = 88;
+
+            var rootLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                Padding = new Padding(12),
+                AutoScroll = true
+            };
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            var filesGroup = new GroupBox
+            {
+                Text = "文件与目录",
+                Dock = DockStyle.Top,
+                Height = 132,
+                Padding = new Padding(8),
+                Margin = new Padding(0, 0, 0, 8)
+            };
 
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
                 RowCount = 6,
-                Padding = new Padding(12)
+                Padding = new Padding(0)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, LABEL_COL_WIDTH));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -148,7 +170,8 @@ namespace MultiToolWin.Pages
             layout.SetColumnSpan(panelOptions, 4);
 
             // ④ 进度区
-            var panelProgress = new TableLayoutPanel { Dock = DockStyle.Top, Height = 90, ColumnCount = 2, Padding = new Padding(0, 6, 0, 0) };
+            var progressGroup = new GroupBox { Text = "执行进度", Dock = DockStyle.Top, Height = 118, Padding = new Padding(8), Margin = new Padding(0, 6, 0, 0) };
+            var panelProgress = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
             panelProgress.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             panelProgress.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             panelProgress.Controls.Add(new Label { Text = "当前：", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
@@ -163,12 +186,11 @@ namespace MultiToolWin.Pages
             panelProgress.Controls.Add(new Label { Text = "用时：", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
             lblElapsed = new Label { Text = "00:00:00", AutoSize = true, Anchor = AnchorStyles.Left };
             panelProgress.Controls.Add(lblElapsed, 1, 3);
-            layout.Controls.Add(panelProgress, 0, 3);
-            layout.SetColumnSpan(panelProgress, 4);
+            progressGroup.Controls.Add(panelProgress);
 
             // ⑤ 按钮行
             btnStart = new Button { Text = "开始创建", AutoSize = false, Width = BUTTON_COL_WIDTH, Height = 28, Margin = new Padding(6, 3, 0, 3), FlatStyle = FlatStyle.System };
-            btnStop = new Button { Text = "停止", AutoSize = false, Width = 84, Height = 28, Margin = new Padding(0, 3, 0, 3), Enabled = false, FlatStyle = FlatStyle.System };
+            btnStop = new Button { Text = "停止", AutoSize = false, Width = BUTTON_COL_WIDTH, Height = 28, Margin = new Padding(0, 3, 0, 3), Enabled = false, FlatStyle = FlatStyle.System };
 
             btnStart.Click += (s, e) => DoMakeFolders();
             btnStop.Click += (s, e) => _cts?.Cancel();
@@ -181,10 +203,12 @@ namespace MultiToolWin.Pages
             };
             btnPanel.Controls.Add(btnStop);
             btnPanel.Controls.Add(btnStart);
-            layout.Controls.Add(btnPanel, 0, 4);
-            layout.SetColumnSpan(btnPanel, 4);
+            filesGroup.Controls.Add(layout);
+            rootLayout.Controls.Add(filesGroup, 0, 0);
+            rootLayout.Controls.Add(progressGroup, 0, 1);
+            rootLayout.Controls.Add(btnPanel, 0, 2);
 
-            Controls.Add(layout);
+            Controls.Add(rootLayout);
         }
 
         // 开始/结束 & 进度

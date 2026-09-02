@@ -7,7 +7,9 @@ namespace MultiToolWin
 {
     public class MainForm : Form
     {
-        private ListBox navList;
+        private Button[] navButtons;
+        private Font navRegularFont;
+        private Font navCurrentFont;
         private Panel contentPanel;
         private TextBox txtLog;
         private Button btnClearLog, btnCopyLog;
@@ -17,54 +19,50 @@ namespace MultiToolWin
         private PageRename pageRename;
         private PageCompare pageCompare;
         private PageMkFolders pageMkFolders;
-     
-
-        // —— 导航自绘需要的字段（类级别） ——
-        private int _hoverIndex = -1;
-
-        private static readonly Color ColSelectedBack = ColorTranslator.FromHtml("#EDEFF3"); // 选中底
-        private static readonly Color ColHoverBack = ColorTranslator.FromHtml("#F2F4F7");   // 悬停底
-        private static readonly Color ColText = ColorTranslator.FromHtml("#1F2328");        // 文本色
-        private static readonly Color ColIndicator = ColorTranslator.FromHtml("#3B82F6");   // 左2px指示条
-
         public MainForm()
         {
-            Text = "整合工具箱 v3.1  (.NET 4.7.2)";
+            Text = "整合工具箱 v3.2  (.NET 4.7.2)";
             Width = 1000;
             Height = 650;
             StartPosition = FormStartPosition.CenterScreen;
+            Font = new Font("Microsoft YaHei UI", 9f);
+            navRegularFont = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular);
+            navCurrentFont = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold);
 
             // 左侧导航
-            navList = new ListBox
+            var navigationPanel = new Panel
             {
                 Dock = DockStyle.Left,
-                Width = 120
+                Width = 142,
+                Padding = new Padding(8, 10, 8, 8)
             };
-            navList.Items.AddRange(new object[] {
-                "Excel 图片提取",
-                "批量重命名",
-                "数量/页数对比",
-                "批量建文件夹",
-            
-            });
-            navList.SelectedIndexChanged += (s, e) => SwitchPage(navList.SelectedIndex);
-
-            // —— 极简外观设置 ——
-            navList.Font = new Font("Microsoft YaHei UI", 10f);
-            navList.BorderStyle = BorderStyle.None;
-            navList.IntegralHeight = false;
-            navList.ItemHeight = 30;                 // 28~32 均可
-            navList.DrawMode = DrawMode.OwnerDrawFixed;
-            navList.BackColor = Color.White;
-
-            // 事件：自绘 + 悬停
-            navList.DrawItem += NavList_DrawItem;
-            navList.MouseMove += (s, e) =>
+            var navigationLayout = new TableLayoutPanel
             {
-                int idx = navList.IndexFromPoint(e.Location);
-                if (idx != _hoverIndex) { _hoverIndex = idx; navList.Invalidate(); }
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 1,
+                RowCount = 4
             };
-            navList.MouseLeave += (s, e) => { _hoverIndex = -1; navList.Invalidate(); };
+            string[] pageNames = { "Excel 图片提取", "批量重命名", "数量/页数对比", "批量建文件夹" };
+            navButtons = new Button[pageNames.Length];
+            for (int i = 0; i < pageNames.Length; i++)
+            {
+                int pageIndex = i;
+                var button = new Button
+                {
+                    Text = pageNames[i],
+                    Dock = DockStyle.Fill,
+                    Height = 32,
+                    Margin = new Padding(0, 0, 0, 6),
+                    FlatStyle = FlatStyle.System,
+                    Font = navRegularFont
+                };
+                button.Click += (s, e) => SwitchPage(pageIndex);
+                navButtons[i] = button;
+                navigationLayout.Controls.Add(button, 0, i);
+                navigationLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            }
+            navigationPanel.Controls.Add(navigationLayout);
 
             // 右侧内容区
             contentPanel = new Panel
@@ -74,10 +72,12 @@ namespace MultiToolWin
             };
 
             // 底部全局日志
-            var logPanel = new Panel
+            var logPanel = new GroupBox
             {
                 Dock = DockStyle.Bottom,
-                Height = 150
+                Height = 158,
+                Text = "运行日志",
+                Padding = new Padding(8)
             };
             txtLog = new TextBox
             {
@@ -89,11 +89,12 @@ namespace MultiToolWin
             var logButtons = new FlowLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 36,
-                FlowDirection = FlowDirection.RightToLeft
+                Height = 34,
+                FlowDirection = FlowDirection.RightToLeft,
+                Padding = new Padding(0, 0, 0, 2)
             };
-            btnClearLog = new Button { Text = "清空", Width = 80, Height = 28 };
-            btnCopyLog = new Button { Text = "复制", Width = 80, Height = 28 };
+            btnClearLog = new Button { Text = "清空", Width = 80, Height = 26, FlatStyle = FlatStyle.System };
+            btnCopyLog = new Button { Text = "复制", Width = 80, Height = 26, FlatStyle = FlatStyle.System };
             btnClearLog.Click += (s, e) => txtLog.Clear();
             btnCopyLog.Click += (s, e) => { if (!string.IsNullOrEmpty(txtLog.Text)) Clipboard.SetText(txtLog.Text); };
             logButtons.Controls.Add(btnClearLog);
@@ -103,7 +104,7 @@ namespace MultiToolWin
 
             Controls.Add(contentPanel);
             Controls.Add(logPanel);
-            Controls.Add(navList);
+            Controls.Add(navigationPanel);
 
             // 创建页面
             Action<string> logger = Log;
@@ -114,7 +115,7 @@ namespace MultiToolWin
          
 
             // 默认页
-            navList.SelectedIndex = 0;
+            SwitchPage(0);
         }
 
         private void SwitchPage(int index)
@@ -134,6 +135,12 @@ namespace MultiToolWin
                 page.Dock = DockStyle.Fill;
                 contentPanel.Controls.Add(page);
             }
+
+            for (int i = 0; i < navButtons.Length; i++)
+            {
+                navButtons[i].Enabled = true;
+                navButtons[i].Font = i == index ? navCurrentFont : navRegularFont;
+            }
         }
 
         public void Log(string msg)
@@ -151,37 +158,5 @@ namespace MultiToolWin
             try { txtLog.AppendText(line + Environment.NewLine); } catch { }
         }
 
-        // —— ListBox 极简自绘 ——
-        private void NavList_DrawItem(object sender, DrawItemEventArgs e)
-        {
-            e.DrawBackground();
-            if (e.Index < 0 || e.Index >= navList.Items.Count) return;
-
-            bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-            bool hovered = (!selected && e.Index == _hoverIndex);
-
-            // 背景
-            using (var back = new SolidBrush(selected ? ColSelectedBack : hovered ? ColHoverBack : Color.White))
-                e.Graphics.FillRectangle(back, e.Bounds);
-
-            // 左侧 2px 指示条（仅选中）
-            if (selected)
-            {
-                var bar = new Rectangle(e.Bounds.X, e.Bounds.Y, 2, e.Bounds.Height);
-                using (var sb = new SolidBrush(ColIndicator))
-                    e.Graphics.FillRectangle(sb, bar);
-            }
-
-            // 文本区域：左右留白
-            var textRect = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 20, e.Bounds.Height);
-
-            TextRenderer.DrawText(
-                e.Graphics,
-                navList.Items[e.Index].ToString(),
-                navList.Font,
-                textRect,
-                ColText,
-                TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
-        }
     }
 }
