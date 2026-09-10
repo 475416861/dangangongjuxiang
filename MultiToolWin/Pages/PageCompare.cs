@@ -64,13 +64,20 @@ namespace MultiToolWin.Pages
             // 标题区、8px 内边距和两行 30px 控件行合计需要约 104px，避免第二行被边框裁切。
             var inputGroup = new GroupBox { Text = "文件与目录", Dock = DockStyle.Top, Height = 104, Padding = new Padding(8), Margin = new Padding(0, 0, 0, 8) };
             var inputLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
-            inputLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
+            inputLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
             inputLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             inputLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 84));
             inputLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
             inputLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
 
-            inputLayout.Controls.Add(new Label { Text = "Excel 文件：", AutoSize = true, Anchor = AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) }, 0, 0);
+            inputLayout.Controls.Add(new Label
+            {
+                Text = "Excel 文件：",
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleRight,
+                Margin = new Padding(0, 4, 8, 4)
+            }, 0, 0);
             txtExcel = new TextBox { Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) };
             UiStyle.StyleBrowseRow(txtExcel, null);
             inputLayout.Controls.Add(txtExcel, 1, 0);
@@ -94,7 +101,14 @@ namespace MultiToolWin.Pages
             };
             inputLayout.Controls.Add(btnExcel, 2, 0);
 
-            inputLayout.Controls.Add(new Label { Text = "根目录：", AutoSize = true, Anchor = AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) }, 0, 1);
+            inputLayout.Controls.Add(new Label
+            {
+                Text = "根目录：",
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleRight,
+                Margin = new Padding(0, 4, 8, 4)
+            }, 0, 1);
             txtRoot = new TextBox { Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 4, 8, 4) };
             UiStyle.StyleBrowseRow(txtRoot, null);
             inputLayout.Controls.Add(txtRoot, 1, 1);
@@ -271,7 +285,7 @@ namespace MultiToolWin.Pages
 
             var targets = CollectCompareTargets(root);
             if (targets == null) return;
-            Log($"已在根目录前两层发现 {targets.Count} 个可校对目录。");
+            Log($"已在根目录前两层发现 {targets.Values.Sum(items => items.Count)} 个可校对目录。");
 
             grid.Rows.Clear();
             int match = 0;
@@ -475,17 +489,30 @@ namespace MultiToolWin.Pages
             return 0;
         }
 
-        private List<CompareTarget> CollectCompareTargets(string root)
+        private Dictionary<string, List<CompareTarget>> CollectCompareTargets(string root)
         {
             try
             {
-                var targets = new List<CompareTarget>();
-                foreach (var firstLevelDirectory in Directory.GetDirectories(root))
+                var targets = new Dictionary<string, List<CompareTarget>>(
+                    StringComparer.OrdinalIgnoreCase);
+                var comparer = new ExcelUtils.NaturalStringComparer();
+                foreach (var firstLevelDirectory in Directory.GetDirectories(root)
+                    .OrderBy(path => Path.GetFileName(path), comparer))
                 {
-                    targets.Add(CreateCompareTarget(root, firstLevelDirectory));
-                    foreach (var secondLevelDirectory in Directory.GetDirectories(firstLevelDirectory))
-                        targets.Add(CreateCompareTarget(root, secondLevelDirectory));
+                    AddCompareTarget(targets,
+                        CreateCompareTarget(root, firstLevelDirectory));
+                    foreach (var secondLevelDirectory in
+                        Directory.GetDirectories(firstLevelDirectory)
+                            .OrderBy(path => Path.GetFileName(path), comparer))
+                    {
+                        AddCompareTarget(targets,
+                            CreateCompareTarget(root, secondLevelDirectory));
+                    }
                 }
+
+                foreach (List<CompareTarget> candidates in targets.Values)
+                    candidates.Sort((left, right) =>
+                        comparer.Compare(left.RelativePath, right.RelativePath));
                 return targets;
             }
             catch (Exception ex)
@@ -493,6 +520,19 @@ namespace MultiToolWin.Pages
                 Log($"读取根目录前两层文件夹失败：{ex.Message}");
                 return null;
             }
+        }
+
+        private static void AddCompareTarget(
+            Dictionary<string, List<CompareTarget>> targets,
+            CompareTarget target)
+        {
+            List<CompareTarget> candidates;
+            if (!targets.TryGetValue(target.Name, out candidates))
+            {
+                candidates = new List<CompareTarget>();
+                targets.Add(target.Name, candidates);
+            }
+            candidates.Add(target);
         }
 
         private static CompareTarget CreateCompareTarget(string root, string directory)
@@ -509,41 +549,56 @@ namespace MultiToolWin.Pages
             };
         }
 
-        private CompareTargetResolution ResolveCompareTarget(string root, string excelValue, List<CompareTarget> targets)
+        private CompareTargetResolution ResolveCompareTarget(
+            string root,
+            string excelValue,
+            Dictionary<string, List<CompareTarget>> targets)
         {
-            if (excelValue.IndexOf('\\') >= 0 || excelValue.IndexOf('/') >= 0)
+            string input = (excelValue ?? string.Empty).Trim();
+            if (input.IndexOf('\\') >= 0 || input.IndexOf('/') >= 0)
             {
                 string relativePath;
-                if (!TryNormalizeRelativePath(root, excelValue, out relativePath))
+                if (!TryNormalizeRelativePath(root, input, out relativePath))
                 {
-                    Log($"无效相对路径：{excelValue}");
+                    Log($"无效相对路径：{input}");
                     return new CompareTargetResolution { Status = "无效路径" };
                 }
 
-                var exactTarget = targets.FirstOrDefault(target =>
-                    string.Equals(target.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+                List<CompareTarget> relativeCandidates;
+                CompareTarget exactTarget = null;
+                string folderName = Path.GetFileName(relativePath);
+                if (targets.TryGetValue(folderName, out relativeCandidates))
+                {
+                    exactTarget = relativeCandidates.FirstOrDefault(target =>
+                        string.Equals(target.RelativePath, relativePath,
+                            StringComparison.OrdinalIgnoreCase));
+                }
                 if (exactTarget == null)
                 {
-                    Log($"未找到：{relativePath}");
+                    Log($"未找到文件夹：{relativePath}");
                     return new CompareTargetResolution { Status = "未找到文件夹" };
                 }
                 return new CompareTargetResolution { Target = exactTarget };
             }
 
-            var candidates = targets
-                .Where(target => string.Equals(target.Name, excelValue, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            if (candidates.Count == 1) return new CompareTargetResolution { Target = candidates[0] };
+            List<CompareTarget> candidates;
+            if (!targets.TryGetValue(input, out candidates))
+                candidates = null;
+            int candidateCount = candidates == null ? 0 : candidates.Count;
+            if (candidateCount == 1)
+                return new CompareTargetResolution { Target = candidates[0] };
 
-            if (candidates.Count == 0)
+            if (candidateCount == 0)
             {
-                Log($"未找到：{excelValue}");
+                Log($"未找到文件夹：{input}");
                 return new CompareTargetResolution { Status = "未找到文件夹" };
             }
             else
             {
-                Log($"名称“{excelValue}”存在多个匹配目录：{string.Join("、", candidates.Select(target => target.RelativePath))}。请在Excel A列填写相对路径进行精确匹配。");
-                return new CompareTargetResolution { Status = "名称重复" };
+                Log($"发现重复文件夹：{input}{Environment.NewLine}" +
+                    string.Join(Environment.NewLine,
+                        candidates.Select(target => target.RelativePath)));
+                return new CompareTargetResolution { Status = "重复文件夹名" };
             }
         }
 

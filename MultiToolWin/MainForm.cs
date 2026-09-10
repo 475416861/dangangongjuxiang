@@ -11,6 +11,7 @@ namespace MultiToolWin
         private Font navRegularFont;
         private Font navCurrentFont;
         private Panel contentPanel;
+        private GroupBox logPanel;
         private TextBox txtLog;
         private Button btnClearLog, btnCopyLog;
 
@@ -19,9 +20,10 @@ namespace MultiToolWin
         private PageRename pageRename;
         private PageCompare pageCompare;
         private PageMkFolders pageMkFolders;
+        private PagePdf pagePdf;
         public MainForm()
         {
-            Text = "整合工具箱 v3.2  (.NET 4.7.2)";
+            Text = "整合工具箱 v3.3  (.NET 4.7.2)";
             Width = 1000;
             Height = 650;
             StartPosition = FormStartPosition.CenterScreen;
@@ -41,9 +43,9 @@ namespace MultiToolWin
                 Dock = DockStyle.Top,
                 AutoSize = true,
                 ColumnCount = 1,
-                RowCount = 4
+                RowCount = 5
             };
-            string[] pageNames = { "Excel 图片提取", "批量重命名", "数量/页数对比", "批量建文件夹" };
+            string[] pageNames = { "Excel 图片提取", "批量重命名", "数量/页数对比", "批量建文件夹", "PDF生成" };
             navButtons = new Button[pageNames.Length];
             for (int i = 0; i < pageNames.Length; i++)
             {
@@ -72,7 +74,7 @@ namespace MultiToolWin
             };
 
             // 底部全局日志
-            var logPanel = new GroupBox
+            logPanel = new GroupBox
             {
                 Dock = DockStyle.Bottom,
                 Height = 158,
@@ -112,6 +114,7 @@ namespace MultiToolWin
             pageRename = new PageRename(logger);
             pageCompare = new PageCompare(logger);
             pageMkFolders = new PageMkFolders(logger);
+            pagePdf = new PagePdf(logger);
          
 
             // 默认页
@@ -120,6 +123,9 @@ namespace MultiToolWin
 
         private void SwitchPage(int index)
         {
+            // 批量重命名和PDF生成页都有页面内专用信息区，避免重复显示全局日志。
+            logPanel.Visible = index != 1 && index != 4;
+
             contentPanel.Controls.Clear();
             UserControl page = null;
             switch (index)
@@ -128,6 +134,7 @@ namespace MultiToolWin
                 case 1: page = pageRename; break;
                 case 2: page = pageCompare; break;
                 case 3: page = pageMkFolders; break;
+                case 4: page = pagePdf; break;
               
             }
             if (page != null)
